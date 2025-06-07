@@ -1,0 +1,683 @@
+import numpy as np  #numpy 라이브러리 사용 (이름은 np로)
+import matplotlib.pyplot as plt #matplotlib.pyplot 라이브러리 사용 (이름은 plt로)
+import pandas as pd #pandas 라이브러리 사용 (이름은 pd로)
+import math# 올림을 구하기 위해 math 라이브러리 사용
+from matplotlib.lines import Line2D
+
+#data class0: 청사과, 1:사과, 2:바나나, 3:블랙베리, 4:오이, 5:오렌지, 6:복.숭아, 7:배 
+# class8:토마토, 9:수박
+
+#C:\\Users\\이상훈\\OneDrive - 한국공학대학교\\바탕 화면\\인설\\data_set
+#data_y 생성
+
+
+
+#시그모이드 함수
+def logistic(z):
+    
+    logi=1/(1+np.exp(-z))
+    
+    return logi
+
+#one-hot encoding함수
+def One_Hot_Encoding(data_y):
+    N=len(data_y)#데이터의 총 개수
+    Q_class=np.unique(data_y)#클래스 종류
+    Q=len(Q_class)#클래스 개수
+    
+    #one-hot-y초기화
+    one_hot_y=np.zeros([N,Q])
+    #각 클래스에 대해 One-Hot 표현으로 변환
+    for k in np.arange(0,N,1):
+        #해당 비교값이 자동으로 float형으로 변환 되어 저장됨(넘파이 배열 특징)
+        one_hot_y[k,:]=(data_y[k]==Q_class)
+        
+    return one_hot_y
+
+
+
+#오차 역전파알고리즘(batch size 조절가능)
+def Error_Back_Propagation1(Train,Node,batch,epoch):
+    
+    #기본 설계를 위한 데이터셋 분할
+  
+    data=Train
+    #input데이터 속성 수
+    input_N=data.shape[1]-1
+    data_x=data[:,:input_N]
+    data_y=data[:,input_N:input_N+1]
+    
+    #데이터 총 개수
+    N=len(data_x)
+    one=np.ones([len(data_x),1])
+    one1=np.ones([1,1])
+   
+    #Output 클래스 수
+    Q=len(np.unique(data_y))
+    #히든 layer 노드 수 
+    L=Node
+    #입력 layer와 히든 layer 사이의 weight 초기화
+    v=(np.random.rand(L,input_N+1)*2-1)
+    #히든 layer와 출력 layer 사이의 weight 초기화
+    w=(np.random.rand(Q,L+1)*2-1)
+    
+    learningrate=0.005#0.1:학습 실패 ,0.05:학습실패,0.01:정확도0.7정도(낮은편인거같음)
+    acc=[]
+    mse=[]
+    w_all=[]
+    v_all=[]
+    
+    #에폭
+    for i in np.arange(0,epoch,1):
+        #데이터셋 셔플+분할
+        np.random.shuffle(data)
+        data_x=data[:,:input_N]
+        data_y=data[:,input_N:input_N+1]
+        
+        #y값 one-hot형태로 변환
+        one_hot_y=One_Hot_Encoding(data_y)
+        #더미노드를 추가한 x데이터 생성
+        x=np.concatenate((data_x,one),axis=1)
+        
+        #데이터 업데이트
+  
+        for n in np.arange(0,N,batch):         
+            #배치 사이즈와 데이터셋이 나누어 떨어지지 않을 때를 위해 구함
+            maxN = min(batch, N - n) 
+            one1=np.ones([1,maxN])
+            #히든 layer의 a값을 구함
+            a=(v@x[n:n+maxN,:].T).reshape(L,maxN)
+            #a값을 로지스틱 함수에 통과시켜 b를 구함
+            b=logistic(a)
+            b=np.concatenate((b,one1),axis=0)
+            #출력  layer의 B값을 구함
+            B=w@b
+            #B값을 로지스틱 함수에 통과시켜 y_hat을 구함
+            y_hat=logistic(B)
+            y_hat=y_hat.T
+            #gradient값을 저장할 넘파이 배열 생성
+            learnv=np.zeros((L,input_N + 1))
+            learnw=np.zeros((Q,L+1))
+            #델타 값 계산
+            delta = 2*(y_hat-one_hot_y[n:n+maxN])*y_hat*(1-y_hat)
+            delta=delta.T      
+            #v업데이트를 위한 b(1-b)계산
+            b_v=b[:len(v),:].reshape(len(v),maxN)*(1-b[:len(v),:].reshape(len(v),maxN))
+            #gradient 값 계산
+            learnv=((delta.T@w[:,:len(v)]).T*b_v)@x[n:n+maxN,:].reshape(maxN,input_N+1)
+            learnw=delta@b.T
+            #각각의 배열에 저장     
+            # v=v-learningrate*((sum_qw.T*b_v)@x[n,:].reshape(1,input_N+1))
+                
+            #배열의 평균 값으로 바꿔줌
+            learnw=learnw/maxN
+            learnv=learnv/maxN
+            #해당값으로 업데이트
+            v=v-learningrate*learnv
+            w=w-learningrate*(learnw) 
+           
+        #한 에폭이 지난 후 업데이트 된 v와 w를 이용해 전체 데이터에 대한 y_hat을 구함
+        a_all = v @ x.T
+        b_all = logistic(a_all)
+        b_all = np.concatenate((b_all, one.T), axis=0)
+        B_all = w @ b_all
+        y_hat_all = logistic(B_all).T
+        w_all.append(w)
+        v_all.append(v)
+        #mse값과 acc값을 구함
+        mse.append(np.mean(np.sum((y_hat_all - one_hot_y) ** 2, axis=1)))
+        acc.append(Accuracy_max(one_hot_y,y_hat_all,N))
+        
+    return mse,acc,w_all,v_all
+
+#정확도 구하는 함수   
+def Accuracy_max(one_hot_y,y_hat,N):#max기준
+    #예측결과를 저장 할 함수
+    y_hat=y_hat.T
+    y_hat_k=np.zeros([len(y_hat),y_hat.shape[1]])
+    #y_hat값 중한 열에 대해 최대값만 1로 변환 나머지는 0(넘파이 배열 특성:값을 바꿈)
+  
+    for i in np.arange(0,N,1):
+        y_hat_k[:,i]=(y_hat[:,i]==max(y_hat[:,i]))
+    acc=np.mean(np.all(one_hot_y == y_hat_k.T, axis=1))
+    return acc
+
+
+#특정 데이터 셋을 train, test set으로 나눠주는 함수
+def Divide_data_set(new_xy_np,train,test): 
+  
+    
+    #가져온 데이터의 비율을 구함
+    rate=len(new_xy_np)//10
+    
+    #데이터 나눌 구간
+    train_rate=train*rate
+    test_rate=test*rate+train_rate
+    
+    #인덱스 셔플
+    np.random.shuffle(new_xy_np)
+    
+    #데이터set 나누기
+    Training_set=new_xy_np[0:train_rate,:]
+    Test_set=new_xy_np[train_rate:test_rate,:]
+    data=pd.DataFrame(Training_set)
+
+    
+    Training_set=data.to_numpy(dtype="float64")#데이터 프레임을 넘파이 배열로 형변환
+    data=pd.DataFrame(Test_set)
+
+
+    Test_set=data.to_numpy(dtype="float64")#데이터 프레임을 넘파이 배열로 형변환
+    
+    
+    return Training_set,Test_set
+
+
+#두개의 계층으로 이루어진 인공신경망 설계 함수
+def ConfusionMatrix(data,data_x,data_y,Node,w,v,directory):
+    #input데이터 속성 수
+    input_N=data_x.shape[1]
+    one_hot_y=One_Hot_Encoding(data_y)
+    one=np.ones([len(data_x),1])
+    #더미노드를 추가한 x데이터 생성
+    x=np.concatenate((data_x,one),axis=1)
+    #Output 클래스 수
+    Q=len(np.unique(data_y))
+    #히든 layer 노드 수 
+    L=Node
+    N=len(data_x)
+
+    #히든 layer의 a값을 구함
+    a=v@x.T
+    #a값을 로지스틱 함수에 통과시켜 b를 구함
+    b=logistic(a)
+    b=np.concatenate((b,one.T),axis=0)
+    #출력  layer의 B값을 구함
+    B=w@b
+    #B값을 로지스틱 함수에 통과시켜 y_hat을 구함
+    y_hat=logistic(B)
+
+    y_hat_k=np.zeros([len(y_hat),y_hat.shape[1]])
+    #y_hat값 중한 열에 대해 최대값만 1로 변환 나머지는 0(넘파이 배열 특성:값을 바꿈)
+  
+    for i in np.arange(0,N,1):
+        y_hat_k[:,i]=(y_hat[:,i]==max(y_hat[:,i]))
+    #클래스 값으로 라벨링    
+    y_true=np.argmax(one_hot_y, axis=1)
+    y_pred=np.argmax(y_hat_k.T, axis=1)
+ 
+    
+    wrong_idx = np.where(y_true != y_pred)[0]
+    wrong_data = data_x[wrong_idx]
+    
+    #데이터셋에서 예측실패 데이터 인덱스 구하기
+    data_index = []
+    
+    for wrong_sample in wrong_data:
+        # data의 각 행과 wrong_sample을 비교
+        idx = np.where((data[:, :8] == wrong_sample[:8]).all(axis=1))[0]
+        if len(idx) > 0:
+            data_index.append(idx[0]) 
+    data_index=np.array(data_index)
+            
+            
+    k=3
+    cluster,cluster_index=k_mean_clustering(k,wrong_data)
+    for i, group in enumerate(cluster):
+        print(f"[클러스터 {i}] 샘플 수: {len(group)}")
+        print(f"클러스터 {i} 인덱스:", data_index[cluster_index[i]])  
+        print("평균 특징값:", np.round(np.mean(group, axis=0), 2))
+        print() 
+    file_list=sorted(os.listdir(directory),key=extract_two_numbers)
+    visualize_cluster_sample(file_list, data_index, cluster_index,directory,max_per_cluster=5)
+    
+    
+    #matrix 생성
+    confusionmatrix = np.zeros((Q, Q), dtype=int)
+    
+    for i in range(len(y_true)):
+        true_label = y_true[i]
+        pred_label = y_pred[i]
+        confusionmatrix[true_label][pred_label] += 1 
+        
+    correct = np.trace(confusionmatrix)   # 대각선 합 (정분류 수)
+    total = np.sum(confusionmatrix)       # 전체 샘플 수
+    accuracy = correct / total
+    return confusionmatrix ,accuracy,cluster
+
+def visualize_cluster_sample(images, wrong_idx, cluster_index, directory,max_per_cluster=5):
+    """
+    각 클러스터에서 대표 이미지들을 시각화
+
+    Parameters:
+        images           : 전체 이미지 배열 (index 기준)
+        wrong_idx        : 오분류된 샘플의 전체 인덱스 (data_x 기준 → images 인덱스와 연결)
+        cluster_indices  : k_mean_clustnering_with_index()가 반환한 클러스터별 인덱스 리스트
+        max_per_cluster  : 클러스터당 시각화할 샘플 수 (기본값: 5)
+    """
+
+    k = len(cluster_index)
+    for j in range(k):
+        print(f"\n📦 클러스터 {j} (샘플 수: {len(cluster_index[j])})")
+        fig, axes = plt.subplots(1, min(max_per_cluster, len(cluster_index[j])), figsize=(15, 3))
+        if len(cluster_index[j]) == 1:
+            axes = [axes]
+        for i, ax in enumerate(axes):
+            if i >= len(cluster_index[j]):
+                break
+            img_index = wrong_idx[cluster_index[j][i]]  # 실제 이미지 인덱스
+            name=images[img_index]
+            path=os.path.join(directory,name)
+            img_GRB = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
+               
+            img_RGB=cv2.cvtColor(img_GRB,cv2.COLOR_BGR2RGB)
+            ax.imshow(img_RGB)
+            ax.set_title(f"Index: {img_index}")
+            ax.axis("off")
+        plt.suptitle(f"Cluster {j} 대표 이미지", fontsize=14)
+        plt.show()
+        
+def k_mean_clustering(k,data):
+
+    n=len(data)
+    init_index=np.random.choice(n, size=k, replace=False)
+    init_mid=data[init_index]
+    pre_mid=np.zeros([k,data.shape[1]])
+    new_mid=np.zeros([k,data.shape[1]])
+    pre_mid=init_mid
+    while(1):  
+        
+       
+        L2_norm=[]
+        for j in np.arange(0,k,1):
+            L2=[]
+            for i in np.arange(0,n,1):
+                L2.append(np.sqrt(np.sum((data[i] - pre_mid[j])**2)))
+            L2_norm.append(L2)
+        L2_norm=np.array(L2_norm)
+        L2_norm=L2_norm.T
+    
+        cluster=np.argmin(L2_norm, axis=1)
+       
+        for j in np.arange(k):
+            cluster_point=data[cluster==j]
+            if(len(cluster_point)>0):
+                new_mid[j]=np.mean(cluster_point,axis=0)
+                
+    
+        if(np.array_equal(new_mid, pre_mid)):
+            break
+        else:
+            pre_mid=new_mid
+    cluster_array=[]     
+    for j in np.arange(k):
+        cluster_array.append(data[cluster==j])
+    cluster_index=[]
+    for j in range(k):
+        cluster_index.append(np.where(cluster==j)[0])
+    return cluster_array,cluster_index
+
+
+#두개의 계층으로 이루어진 인공신경망 설계 함수
+def test_accuracy(data_x,data_y,Node,w,v):
+    #input데이터 속성 수
+    input_N=data_x.shape[1]
+    one_hot_y=One_Hot_Encoding(data_y)
+    one=np.ones([len(data_x),1])
+    #더미노드를 추가한 x데이터 생성
+    x=np.concatenate((data_x,one),axis=1)
+    #Output 클래스 수
+    Q=len(np.unique(data_y))
+    #히든 layer 노드 수 
+    L=Node
+    N=len(data_x)
+    mse=[]
+    acc=[]
+    for k in np.arange(0,len(w),1):
+        w_t=np.array(w[k])
+        v_t=np.array(v[k])
+    #히든 layer의 a값을 구함
+        a=v_t@x.T
+        #a값을 로지스틱 함수에 통과시켜 b를 구함
+        b=logistic(a)
+        b=np.concatenate((b,one.T),axis=0)
+        #출력  layer의 B값을 구함
+        B=w_t@b
+        #B값을 로지스틱 함수에 통과시켜 y_hat을 구함
+        y_hat=logistic(B)
+        mse.append(np.mean(np.sum((y_hat.T - one_hot_y) ** 2, axis=1)))
+        acc.append(Accuracy_max(one_hot_y,y_hat.T,N))
+           
+ 
+    return mse,acc
+
+
+'''
+R	G	B	색상 설명
+0	0	0	검정 (black)
+255	255	255	흰색 (white)
+255	0	0	빨강 (pure red)
+0	255	0	초록 (pure green)
+0	0	255	파랑 (pure blue)
+255	255	0	노랑 (red + green)
+0	255	255	청록 (green + blue)
+255	0	255	자홍/핑크 (red + blue)
+'''
+def extract_two_numbers(filename):
+   # 예: '0_10.jpg' → (0, 10)
+   name = os.path.splitext(filename)[0]  # 확장자 제거: '0_10'
+   parts = name.split('_')
+   return (int(parts[0]), int(parts[1]))
+
+import os
+import cv2
+import numpy as np
+def select_features(directory):
+  
+    file_list = sorted(os.listdir(directory), key=extract_two_numbers)
+    feature_1_list=[]
+    feature_2_list=[]
+    feature_3_list=[]
+    feature_4_list=[]
+    feature_5_list=[]
+    feature_6_list=[]
+    feature_7_list=[]
+    feature_8_list=[]
+    feature_9_list=[]
+    feature_10_list=[]
+    labels=[]
+    for name in file_list:
+        if(name=="7_0.jpg"):
+            print("지금")
+        path=os.path.join(directory,name)
+        labels.append(int(name.split('_',1)[0]))
+        img_GRB = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
+           
+        img_RGB=cv2.cvtColor(img_GRB,cv2.COLOR_BGR2RGB)
+       
+        
+        #특징 1 블렉베리
+        feature_1=is_blackberry(img_RGB)
+        
+        #특징 2 배
+        if(feature_1):
+            feature_2=0
+        else:
+            feature_2=is_bae(img_RGB)
+            
+         #특징 3 청사과, 수박  
+        if(feature_1): 
+            feature_3=0
+        else:
+            feature_3=is_green(img_RGB)
+            
+        #청사과,수박 구분  
+        if(feature_1):
+            feature_4=0
+        elif(feature_3):
+            feature_4=left_right(img_RGB)
+        else:
+            feature_4=0
+         
+         #오이 구분 
+        if(feature_1 or  feature_2 or feature_3 or feature_4):  
+            feature_5=0
+        else:
+             feature_5=is_oi(img_RGB)
+                
+             
+           #바나나     
+        if(feature_1 or feature_3 or feature_4 or feature_5):  
+            feature_6=0
+        else:
+             feature_6=is_white(img_RGB)
+      
+        
+        
+            
+        if(feature_1 or feature_3 or feature_4 or feature_5):  
+            feature_7=0
+        else:
+            if feature_6>=0.45:
+                feature_7=0
+            else:
+                feature_7=right_left(img_RGB)
+                
+        
+        if(feature_1 or feature_2 or feature_3 or feature_4 or feature_5 or feature_6 or feature_7):  
+            feature_8=0
+        else:
+             feature_8=np.mean(img_RGB)/255
+             
+             
+        if(feature_1 or feature_2 or feature_3 or feature_4 or feature_5 or feature_6 or feature_7):  
+            feature_9=0
+        else:
+            feature_9=np.mean(img_RGB[:,:,0])/255
+             
+             
+        
+        
+        
+        feature_1_list.append(feature_1)
+        feature_2_list.append(feature_2)
+        feature_3_list.append(feature_3)
+        feature_4_list.append(feature_4)
+        feature_5_list.append(feature_5)
+        feature_6_list.append(feature_6)
+        feature_7_list.append(feature_7)
+        feature_8_list.append(feature_8)
+        feature_9_list.append(feature_9)
+        # feature_10_list.append(feature_10)
+        
+    feature_1_list=np.array(feature_1_list)
+    feature_2_list=np.array(feature_2_list)
+    feature_3_list=np.array(feature_3_list)
+    feature_4_list=np.array(feature_4_list)
+    feature_5_list=np.array(feature_5_list)
+    feature_6_list=np.array(feature_6_list)
+    feature_7_list=np.array(feature_7_list)
+    feature_8_list=np.array(feature_8_list)
+    feature_9_list=np.array(feature_9_list)
+    # feature_10_list=np.array(feature_10_list)
+    features=np.column_stack([feature_1_list, feature_2_list,
+                              feature_3_list,feature_4_list,feature_5_list,feature_6_list
+                              ,feature_7_list
+                                , feature_8_list
+                                 ,feature_9_list
+                               #  ,feature_10_list
+                              ])
+    
+    
+    return features,labels
+    
+def is_blackberry(img):
+   # 마스크로 검은 픽셀 비율 계산
+
+    r, g, b = img[ :, :,0], img[ :, :,1], img[ :, :,2]
+    black_mask = (r < 50) & (g <50) & (b < 50)
+    green_mask = (g > 130) & (g > r + 30) & (g > b + 30) 
+    green_ratio=np.sum(green_mask) / (img.shape[0] * img.shape[1])
+    black_ratio=np.sum(black_mask) / (img.shape[0] * img.shape[1])
+    if(black_ratio>0.1 and green_ratio<0.7):
+        return 1
+    else:
+        return 0
+def is_bae(img):
+
+    r, g, b = img[ :, :,0], img[ :, :,1], img[ :, :,2]
+    bae_mask= (
+    (r > 175) &       # 더 강한 빨강
+    (g > 140) &       # 더 강한 초록
+    (b < 150)      # 더 낮은 파랑 
+)
+   
+    bae_ratio = np.sum(bae_mask) / (img.shape[0] * img.shape[1])
+  
+
+    # 유일 특성 조건:
+    if(bae_ratio > 0.2 ):
+        return bae_ratio
+    else:
+        return 0
+ 
+ 
+def is_oi(img):
+
+    r, g, b = img[ :, :,0], img[ :, :,1], img[:, :,2]
+    white_mask= (r>240)&(b>240)&(g>240)
+    green_mask=(g > r + 20) & (g > b + 20)&(b<250)&(r<250)
+    
+    white_ratio = np.sum(white_mask) / (img.shape[0] * img.shape[1])
+    green_ratio = np.sum(green_mask) / (img.shape[0] * img.shape[1]) 
+    # 유일 특성 조건:
+    if(white_ratio > 0.5 and green_ratio >0.2 ):
+        return 1
+    else:
+        return 0
+    
+def is_white(img):
+
+    r, g, b = img[ :, :,0], img[ :, :,1], img[:, :,2]
+    white_mask= (r>240)&(b>100)&(g>200)
+    fruit=~white_mask
+    yellow_mask=(r>120)&(b<100)&(g>120)    
+    white_ratio = np.sum(white_mask) / (img.shape[0] * img.shape[1])
+   
+    # green_ratio = np.sum(green_mask) / (img.shape[0] * img.shape[1]) 
+    # 유일 특성 조건:
+        
+    if(white_ratio > 0.4):
+        return white_ratio
+    else:
+        return 0
+ 
+def is_green(img):
+    r, g, b = img[ :, :,0], img[ :, :,1], img[ :, :,2]
+    green_mask=(g > r + 20) & (g > b + 20) & (g >100)&(b<250)&(r<250)
+    green_ratio = np.sum(green_mask) / (img.shape[0] * img.shape[1]) 
+    # 유일 특성 조건:
+    if(green_ratio > 0.45 ):
+        return 1
+    else:
+        return 0
+    
+    
+    
+def left_right(img):   
+    g= img[ :, :,1]
+    g_filtered = g.copy() 
+    g_filtered = g.astype(float) 
+    g_filtered[g_filtered >= 250] =np.nan  # 흰 배경 → NaN으로 제외
+    
+    # 좌우 평균 (NaN 제외하고 평균)
+    bright_left = np.nanmean(g_filtered[:, :128])
+    bright_right = np.nanmean(g_filtered[:, 128:])
+    
+    # 좌우 밝기 차이 비율
+    bright = (bright_left - bright_right) / (bright_left + bright_right)
+    
+    if( bright > 0.09 ):
+        return 1
+    else:
+        return 0
+    return bright
+
+def right_left(img):   
+    r= img[ :, :,0]
+    r_filtered = r.copy() 
+    r_filtered = r.astype(float) 
+    r_filtered[r_filtered >= 250] =np.nan  # 흰 배경 → NaN으로 제외
+    
+    # 좌우 평균 (NaN 제외하고 평균)
+    bright_left = np.nanmean(r_filtered[:, :128])
+    bright_right = np.nanmean(r_filtered[:, 128:])
+    
+    # 좌우 밝기 차이 비율
+    bright = (bright_right - bright_left) / (bright_left + bright_right)
+    
+    if( bright > 0 ):
+        return 1
+    else:
+        return 0
+    return bright
+
+
+def is_apple(img):
+    r, g, b = img[ :, :,0], img[ :, :,1], img[ :, :,2]
+    apple_mask=(r > 140) & (g < 130) & (b < 100) & (r > g + 20) & (r > b + 20)
+    apple_ratio = np.sum(apple_mask) / (img.shape[0] * img.shape[1]) 
+    # 유일 특성 조건:
+    if(apple_ratio > 0.25):
+        return 1
+    else:
+        return 0
+    
+    
+    
+
+
+#히든 노드 수
+Node=50
+#데이터 셋 분할 비 설정
+train=7
+test=3
+
+#batch 값 설정
+batch=16
+epoch=300
+init_1=1
+directory="C:\\Users\\이상훈\\OneDrive - 한국공학대학교\\바탕 화면\\인설\\data_set"
+X,y=select_features(directory)
+y=np.array(y)
+y=y.reshape(7000,1)
+
+
+data =np.hstack((X, y)) 
+
+confusionmatrix=[]
+
+#전체적인 성능 평균을 구하기 위해 사용
+n=1
+for i in np.arange(n):
+    #데이터 분할
+    Train,Test=Divide_data_set(data.copy(),train,test)
+    train_x=Train[:,:data.shape[1]-1]
+    train_y=Train[:,data.shape[1]-1:data.shape[1]].reshape(len(Train),1)
+    test_x=Test[:,:data.shape[1]-1]
+    test_y=Test[:,data.shape[1]-1:data.shape[1]].reshape(len(Test),1)
+    
+    mse, acc, w, v = Error_Back_Propagation1(Train, Node,batch,epoch)
+    
+    
+    #confusionmatrix 도출
+    conma,acc_t,cluster=ConfusionMatrix(data,test_x, test_y, Node, w[-1], v[-1],directory)
+    confusionmatrix.append(conma)
+    
+confusionmatrixnum=sum(confusionmatrix)/n
+
+
+
+# #test_set에 대한 그래프를 도출 하기 위해 사용
+# Train,Test=Divide_data_set(data.copy(),train,test)
+# train_x=Train[:,:data.shape[1]-1]
+# train_y=Train[:,data.shape[1]-1:data.shape[1]].reshape(len(Train),1)
+# test_x=Test[:,:data.shape[1]-1]
+# test_y=Test[:,data.shape[1]-1:data.shape[1]].reshape(len(Test),1)
+# Node=[10,50,100]
+# confusionmatrix=[]
+# for n in Node:
+#     mse, acc, w, v = Error_Back_Propagation1(Train, n,batch,epoch)
+#     #confusionmatrix 도출
+#     confusionmatrix.append(ConfusionMatrix(test_x, test_y, n, w[-1], v[-1]))
+#     mse_t,acc_t= test_accuracy(test_x, test_y, Node, w, v)
+#     if(n==10):
+#         mse10,acc10=mse_t,acc_t
+#     elif(n==50):
+#         mse50,acc50=mse_t,acc_t
+#     else:
+#         mse100,acc100=mse_t,acc_t
+     
+        
+        
+        
